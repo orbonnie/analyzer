@@ -1,0 +1,37 @@
+# Virtual environments
+stock/venv/
+football/venv/
+*/venv/
+
+# Database files
+db/*.db
+
+# Logs
+logs/*.log
+
+# Environment variables / secrets
+config/.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Model files (large)
+*.pt
+*.pth
+*.onnx
+*.trt
+
+# Raw film footage
+football/film/
