@@ -1,0 +1,25 @@
+database:
+  stock: /opt/analyzer/db/stock.db
+  football: /opt/analyzer/db/football.db
+
+logging:
+  stock: /opt/analyzer/logs/stock.log
+  football: /opt/analyzer/logs/football.log
+  level: INFO
+
+stock:
+  tickers:
+    - AAPL
+  fetch_interval_minutes: 5
+  news_interval_minutes: 15
+  market_open: "09:30"
+  market_close: "16:00"
+
+football:
+  google_drive_folder: "film"
+  sync_time: "22:00"
+
+dashboard:
+  host: "0.0.0.0"
+  stock_port: 5001
+  football_port: 5002
