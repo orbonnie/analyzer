@@ -9,7 +9,8 @@ logging:
 
 stock:
   tickers:
-    - AAPL
+    - TWLO
+    - TSLA
   fetch_interval_minutes: 5
   news_interval_minutes: 15
   market_open: "09:30"

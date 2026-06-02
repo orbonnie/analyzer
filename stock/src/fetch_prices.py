@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import requests
 import sqlite3
 import yaml
 import pandas as pd
@@ -37,6 +38,10 @@ def calculate_indicators(df):
     df['bb_upper'] = sma20 + (std20 * 2)
     df['bb_lower'] = sma20 - (std20 * 2)
 
+    # Volume analysis
+    df['avg_volume_20d'] = df['volume'].rolling(window=20).mean()
+    df['volume_ratio'] = df['volume'] / df['avg_volume_20d']
+
     return df
 
 
@@ -44,7 +49,7 @@ def fetch_and_store(ticker):
     print(f"Fetching {ticker}...")
 
     try:
-        end_date = datetime.today().strftime('%Y-%m-%d')
+        end_date = (datetime.today().strftime('%Y-%m-%d'))
         start_date = (datetime.today() - timedelta(days=90)).strftime('%Y-%m-%d')
 
         aggs = []
@@ -82,8 +87,9 @@ def fetch_and_store(ticker):
         for _, row in df.iterrows():
             c.execute('''INSERT OR REPLACE INTO price_history
                 (ticker, timestamp, open, high, low, close, volume,
-                rsi, macd, signal_line, bb_upper, bb_lower)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                rsi, macd, signal_line, bb_upper, bb_lower,
+                avg_volume_20d, volume_ratio)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                 (
                     ticker,
                     row['timestamp'],
@@ -97,6 +103,8 @@ def fetch_and_store(ticker):
                     round(row['signal_line'], 4) if pd.notna(row['signal_line']) else None,
                     round(row['bb_upper'], 2) if pd.notna(row['bb_upper']) else None,
                     round(row['bb_lower'], 2) if pd.notna(row['bb_lower']) else None,
+                    round(row['avg_volume_20d'], 0) if pd.notna(row['avg_volume_20d']) else None,
+                    round(row['volume_ratio'], 2) if pd.notna(row['volume_ratio']) else None,
                 )
             )
 
@@ -109,5 +117,27 @@ def fetch_and_store(ticker):
 
 for ticker in tickers:
     fetch_and_store(ticker)
+
+    # Patch in today's close if newer
+    url = f'https://api.polygon.io/v2/aggs/ticker/{ticker}/prev'
+    data = requests.get(url, params={'apiKey': API_KEY}).json()
+    if 'results' in data and data['results']:
+        r = data['results'][0]
+        ts = datetime.fromtimestamp(r['t'] / 1000).strftime('%Y-%m-%d')
+        conn = sqlite3.connect(db_path)
+        c = conn.cursor()
+        c.execute('SELECT timestamp FROM price_history WHERE ticker=? ORDER BY timestamp DESC LIMIT 1', (ticker,))
+        existing = c.fetchone()
+        if existing and ts > existing[0]:
+            print(f"{ticker}: Patching latest close {ts} @ ${round(r['c'],2)}")
+            c.execute('''INSERT OR REPLACE INTO price_history
+                (ticker, timestamp, open, high, low, close, volume)
+                VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                (ticker, ts, round(r['o'],2), round(r['h'],2),
+                round(r['l'],2), round(r['c'],2), int(r['v']))
+            )
+            conn.commit()
+        conn.close()
+
 
 print("Price fetch complete")
