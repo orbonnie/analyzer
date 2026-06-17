@@ -17,9 +17,18 @@ c.execute('''CREATE TABLE IF NOT EXISTS price_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ticker TEXT NOT NULL,
     timestamp TEXT NOT NULL,
-    open REAL, high REAL, low REAL, close REAL,
-    volume INTEGER, rsi REAL, macd REAL,
-    signal_line REAL, bb_upper REAL, bb_lower REAL,
+    open REAL,
+    high REAL,
+    low REAL,
+    close REAL,
+    volume INTEGER,
+    rsi REAL,
+    macd REAL,
+    signal_line REAL,
+    bb_upper REAL,
+    bb_lower REAL,
+    avg_volume_20d REAL,
+    volume_ratio REAL,
     UNIQUE(ticker, timestamp)
 )''')
 
@@ -27,9 +36,14 @@ c.execute('''CREATE TABLE IF NOT EXISTS price_history (
 c.execute('''CREATE TABLE IF NOT EXISTS news_sentiment (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp TEXT NOT NULL,
-    headline TEXT, source TEXT, ticker TEXT,
-    sentiment TEXT, confidence INTEGER,
-    affected_sectors TEXT, time_horizon TEXT, reasoning TEXT
+    headline TEXT,
+    source TEXT,
+    ticker TEXT,
+    sentiment TEXT,
+    confidence INTEGER,
+    affected_sectors TEXT,
+    time_horizon TEXT,
+    reasoning TEXT
 )''')
 
 # Technical signals
@@ -44,7 +58,10 @@ c.execute('''CREATE TABLE IF NOT EXISTS signals (
 c.execute('''CREATE TABLE IF NOT EXISTS watchlist (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ticker TEXT UNIQUE NOT NULL,
-    name TEXT, sector TEXT, added_date TEXT, notes TEXT
+    name TEXT,
+    sector TEXT,
+    added_date TEXT,
+    notes TEXT
 )''')
 
 # Macro economic data
@@ -120,6 +137,79 @@ c.execute('''CREATE TABLE IF NOT EXISTS short_volume (
     UNIQUE(ticker, timestamp)
 )''')
 
+# Macro news table
+c.execute('''CREATE TABLE IF NOT EXISTS macro_news (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    headline TEXT,
+    source TEXT,
+    topic TEXT,
+    sentiment TEXT,
+    reasoning TEXT,
+    UNIQUE(headline, timestamp)
+)''')
+
+# Insider trades
+c.execute('''CREATE TABLE IF NOT EXISTS insider_trades (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticker TEXT NOT NULL,
+    filing_date TEXT,
+    transaction_date TEXT,
+    owner_name TEXT,
+    officer_title TEXT,
+    is_director INTEGER,
+    is_officer INTEGER,
+    transaction_code TEXT,
+    transaction_shares REAL,
+    transaction_price REAL,
+    transaction_value REAL,
+    shares_owned_after REAL,
+    acquired_disposed TEXT,
+    is_10b5_plan INTEGER,
+    record_type TEXT,
+    UNIQUE(ticker, owner_name, transaction_date, transaction_shares)
+)''')
+
+# Institutional holdings from SEC
+c.execute('''CREATE TABLE IF NOT EXISTS institutional_holdings_sec (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticker TEXT NOT NULL,
+    filer_cik TEXT NOT NULL,
+    filer_name TEXT,
+    filing_date TEXT,
+    period TEXT,
+    shares INTEGER,
+    market_value INTEGER,
+    UNIQUE(ticker, filer_cik, period)
+)''')
+
+# Institutional changes quarter over quarter
+c.execute('''CREATE TABLE IF NOT EXISTS institutional_changes_sec (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticker TEXT NOT NULL,
+    filer_cik TEXT,
+    filer_name TEXT,
+    period TEXT,
+    prev_period TEXT,
+    prev_shares INTEGER,
+    curr_shares INTEGER,
+    change_shares INTEGER,
+    change_pct REAL,
+    UNIQUE(ticker, filer_cik, period)
+)''')
+
+# Events calendar
+c.execute('''CREATE TABLE IF NOT EXISTS events_calendar (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticker TEXT,
+    event_date TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    description TEXT,
+    impact TEXT,
+    source TEXT,
+    UNIQUE(ticker, event_date, event_type)
+)''')
+
 c.execute('CREATE INDEX IF NOT EXISTS idx_price_ticker ON price_history(ticker)')
 c.execute('CREATE INDEX IF NOT EXISTS idx_price_timestamp ON price_history(timestamp)')
 c.execute('CREATE INDEX IF NOT EXISTS idx_news_ticker ON news_sentiment(ticker)')
@@ -129,7 +219,13 @@ c.execute('CREATE INDEX IF NOT EXISTS idx_macro_timestamp ON macro_data(timestam
 c.execute('CREATE INDEX IF NOT EXISTS idx_corr_ticker ON macro_correlations(ticker)')
 c.execute('CREATE INDEX IF NOT EXISTS idx_short_ticker ON short_interest(ticker)')
 c.execute('CREATE INDEX IF NOT EXISTS idx_shortvol_ticker ON short_volume(ticker)')
-
+c.execute('CREATE INDEX IF NOT EXISTS idx_macro_news_topic ON macro_news(topic)')
+c.execute('CREATE INDEX IF NOT EXISTS idx_macro_news_timestamp ON macro_news(timestamp)')
+c.execute('CREATE INDEX IF NOT EXISTS idx_insider_ticker ON insider_trades(ticker)')
+c.execute('CREATE INDEX IF NOT EXISTS idx_inst_sec_ticker ON institutional_holdings_sec(ticker)')
+c.execute('CREATE INDEX IF NOT EXISTS idx_inst_change_ticker ON institutional_changes_sec(ticker)')
+c.execute('CREATE INDEX IF NOT EXISTS idx_events_ticker ON events_calendar(ticker)')
+c.execute('CREATE INDEX IF NOT EXISTS idx_events_date ON events_calendar(event_date)')
 
 conn.commit()
 conn.close()

@@ -302,6 +302,82 @@ def score_macro(conn):
 
     return max(0, min(100, score)), factors
 
+def score_macro_news(ticker, conn):
+    """Score based on macro news sentiment"""
+    c = conn.cursor()
+
+    # Get macro news from last 7 days
+    cutoff = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+    c.execute('''
+        SELECT topic, headline, sentiment
+        FROM macro_news
+        WHERE timestamp >= ?
+        ORDER BY timestamp DESC
+    ''', (cutoff,))
+    rows = c.fetchall()
+
+    if not rows:
+        return 50, {}
+
+    score = 50
+    factors = {}
+    topic_scores = {}
+
+    # Score each topic's headlines
+    for row in rows:
+        topic = row['topic']
+        headline = row['headline'].lower()
+        sentiment = row['sentiment']
+
+        # Score based on topic impact on growth stocks
+        topic_impact = {
+            'fed_policy': -15,   # hawkish fed = bad for growth
+            'employment': -5,    # strong jobs = less cuts = bad
+            'inflation': -10,    # high inflation = bad for growth
+            'geopolitical': -8,  # uncertainty = bad
+            'tech_sentiment': 10,# tech bullish = good
+            'ai_sentiment': 8,   # ai boom = good
+            'economy': 0,        # neutral
+            'markets': 0,        # neutral
+            'business': 0,       # neutral
+            'oil': -5,           # high oil = bad
+            'china': -5,         # china risk = bad
+            'dollar': -5,        # strong dollar = bad
+            'bonds': -5,         # high yields = bad
+            'semiconductors': 5, # chip strength = good
+        }
+
+        # Adjust based on headline sentiment keywords
+        bullish_words = ['cut', 'ease', 'rally', 'surge', 'beat', 'strong growth', 'bullish']
+        bearish_words = ['hike', 'rise', 'fall', 'crash', 'recession', 'hawkish', 'concern']
+
+        impact = topic_impact.get(topic, 0)
+        if any(w in headline for w in bullish_words):
+            impact = abs(impact)  # flip to positive
+        elif any(w in headline for w in bearish_words):
+            impact = -abs(impact)  # ensure negative
+
+        if topic not in topic_scores:
+            topic_scores[topic] = []
+        topic_scores[topic].append(impact)
+
+    # Average score per topic
+    for topic, scores in topic_scores.items():
+        avg = sum(scores) / len(scores)
+        score += avg
+
+    # Build factors summary
+    if topic_scores:
+        bearish_topics = [t for t, s in topic_scores.items() if sum(s)/len(s) < 0]
+        bullish_topics = [t for t, s in topic_scores.items() if sum(s)/len(s) > 0]
+        if bearish_topics:
+            factors['macro_headwinds'] = f"Bearish macro: {', '.join(bearish_topics)}"
+        if bullish_topics:
+            factors['macro_tailwinds'] = f"Bullish macro: {', '.join(bullish_topics)}"
+        factors['macro_articles'] = f"{len(rows)} macro articles analyzed"
+
+    return max(0, min(100, score)), factors
+
 def score_momentum(ticker, conn):
     """Score price momentum"""
     c = conn.cursor()
@@ -391,14 +467,16 @@ def generate_signal(ticker):
     squeeze_score, squeeze_factors = score_short_squeeze(ticker, conn)
     macro_score, macro_factors = score_macro(conn)
     momentum_score, momentum_factors = score_momentum(ticker, conn)
+    macro_news_score, macro_news_factors = score_macro_news(ticker, conn)
 
     # Weighted combined score
     combined = (
-        tech_score * 0.25 +
-        vol_score * 0.20 +
-        squeeze_score * 0.25 +
+        tech_score * 0.20 +
+        vol_score * 0.15 +
+        squeeze_score * 0.20 +
         macro_score * 0.15 +
-        momentum_score * 0.15
+        momentum_score * 0.15 +
+        macro_news_score * 0.15
     )
 
     # Signal classification
@@ -430,10 +508,11 @@ def generate_signal(ticker):
     print(f"Short Squeeze: {squeeze_score:.0f}/100 (25% weight)")
     print(f"Macro:         {macro_score:.0f}/100 (15% weight)")
     print(f"Momentum:      {momentum_score:.0f}/100 (15% weight)")
+    print(f"Macro News:    {macro_news_score:.0f}/100 (15% weight)")
 
     print(f"\n--- Key Factors ---")
-    all_factors = {**tech_factors, **vol_factors,
-                   **squeeze_factors, **macro_factors, **momentum_factors}
+    all_factors = {**tech_factors, **vol_factors, **squeeze_factors,
+                   **macro_factors, **momentum_factors, **macro_news_factors}
     for key, value in all_factors.items():
         print(f"  {key}: {value}")
 
